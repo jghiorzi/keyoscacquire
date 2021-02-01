@@ -18,7 +18,7 @@ import keyoscacquire.config as config
 _log = logging.getLogger(__name__)
 
 #: Keysight colour map for the channels
-_SCREEN_COLORS = {1:'C1', 2:'C2', 3:'C0', 4:'C3'}
+_SCREEN_COLORS = {1: "C1", 2: "C2", 3: "C0", 4: "C3"}
 
 
 def check_file(fname, ext=config._filetype, num=""):
@@ -41,16 +41,20 @@ def check_file(fname, ext=config._filetype, num=""):
     fname : str
         New fname base
     """
-    while os.path.exists(fname+num+ext):
-        append = input(f"File '{fname+num+ext}' exists! Append to filename '{fname}' before saving: ")
+    while os.path.exists(fname + num + ext):
+        append = input(
+            f"File '{fname+num+ext}' exists! Append to filename '{fname}' before saving: "
+        )
         fname += append
     return fname
 
 
 ## Trace plotting ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 
-def plot_trace(time, y, channels, fname="", showplot=config._show_plot,
-               savepng=config._export_png):
+
+def plot_trace(
+    time, y, channels, fname="", showplot=config._show_plot, savepng=config._export_png
+):
     """Plots the trace with oscilloscope channel screen colours according to
     the Keysight colourmap and saves as a png.
 
@@ -73,10 +77,10 @@ def plot_trace(time, y, channels, fname="", showplot=config._show_plot,
         ``True`` exports the plot to ``fname``.png
     """
     fig, ax = plt.subplots()
-    for i, vals in enumerate(np.transpose(y)): # for each channel
+    for i, vals in enumerate(np.transpose(y)):  # for each channel
         ax.plot(time, vals, color=_SCREEN_COLORS[channels[i]])
     if savepng:
-        fig.savefig(fname+".png", bbox_inches='tight')
+        fig.savefig(fname + ".png", bbox_inches="tight")
     if showplot:
         plt.show(fig)
     plt.close(fig)
@@ -84,8 +88,16 @@ def plot_trace(time, y, channels, fname="", showplot=config._show_plot,
 
 ## Trace saving ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 
-def save_trace(fname, time, y, fileheader="", ext=config._filetype,
-               print_filename=True, nowarn=False):
+
+def save_trace(
+    fname,
+    time,
+    y,
+    fileheader="",
+    ext=config._filetype,
+    print_filename=True,
+    nowarn=False,
+):
     """Saves the trace with time values and y values to file.
 
     Current date and time is automatically added to the header. Saving to numpy
@@ -112,18 +124,20 @@ def save_trace(fname, time, y, fileheader="", ext=config._filetype,
     RuntimeError
         If the file already exists
     """
-    if os.path.exists(fname+ext):
+    if os.path.exists(fname + ext):
         raise RuntimeError(f"{fname+ext} already exists")
     if print_filename:
         print(f"Saving trace to:  {fname+ext}\n")
-    data = np.append(time, y, axis=1) # make one array with columns x y1 y2 ..
+    data = np.append(time, y, axis=1)  # make one array with columns x y1 y2 ..
     if ext == ".npy":
         if fileheader and not nowarn:
-            _log.warning(f"(!) WARNING: The file header\n\n{fileheader}\n\nis not saved as file format npy is chosen. "
-                          "\nTo suppress this warning, use the nowarn flag.")
-        np.save(fname+".npy", data)
+            _log.warning(
+                f"(!) WARNING: The file header\n\n{fileheader}\n\nis not saved as file format npy is chosen. "
+                "\nTo suppress this warning, use the nowarn flag."
+            )
+        np.save(fname + ".npy", data)
     else:
-        np.savetxt(fname+ext, data, delimiter=",", header=fileheader)
+        np.savetxt(fname + ext, data, delimiter=",", header=fileheader)
 
 
 def save_trace_npy(fname, time, y, print_filename=True, **kwargs):
@@ -148,8 +162,14 @@ def save_trace_npy(fname, time, y, print_filename=True, **kwargs):
 
 ## Trace loading ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 
-def load_trace(fname, ext=config._filetype, column_names='auto', skip_lines='auto',
-               return_as_df=True):
+
+def load_trace(
+    fname,
+    ext=config._filetype,
+    column_names="auto",
+    skip_lines="auto",
+    return_as_df=True,
+):
     """Load a trace saved with keyoscacquire.oscilloscope.save_file()
 
     What is returned depends on the format of the file (.npy files contain no
@@ -196,19 +216,24 @@ def load_trace(fname, ext=config._filetype, column_names='auto', skip_lines='aut
         beginning of the file starting with ``'#'``, stripped off ``'# '`` is returned
     """
     # Remove extenstion if provided in the fname
-    if fname[-4:] in ['.npy', '.csv']:
+    if fname[-4:] in [".npy", ".csv"]:
         ext = fname[-4:]
         fname = fname[:-4]
     # Format dependent
-    if ext == '.npy':
-        return np.load(fname+ext), None
-    return _load_trace_with_header(fname, ext, column_names=column_names,
-                                   skip_lines=skip_lines,
-                                   return_as_df=return_as_df)
+    if ext == ".npy":
+        return np.load(fname + ext), None
+    return _load_trace_with_header(
+        fname,
+        ext,
+        column_names=column_names,
+        skip_lines=skip_lines,
+        return_as_df=return_as_df,
+    )
 
 
-def _load_trace_with_header(fname, ext, skip_lines='auto', column_names='auto',
-                            return_as_df=True):
+def _load_trace_with_header(
+    fname, ext, skip_lines="auto", column_names="auto", return_as_df=True
+):
     """Read a trace file that has a header (i.e. not ``.npy`` files).
 
     See parameter description for :func:`load_trace()`.
@@ -224,24 +249,27 @@ def _load_trace_with_header(fname, ext, skip_lines='auto', column_names='auto',
     # Load header
     header = load_header(fname, ext)
     # Handle skipping and column names based on the header file
-    if skip_lines == 'auto':
+    if skip_lines == "auto":
         skip_lines = len(header)
-    if column_names == 'auto':
+    if column_names == "auto":
         # Use the header if it is not empty
         if len(header) > 0:
-            column_names = 'header'
+            column_names = "header"
         else:
-            column_names = 'first line of data'
-    if column_names == 'header':
+            column_names = "first line of data"
+    if column_names == "header":
         column_names = header[-1].split(",")
-    elif column_names =='first line of data':
+    elif column_names == "first line of data":
         column_names = None
     # Load the file
-    df = pd.read_csv(fname+ext, delimiter=",", skiprows=skip_lines, names=column_names)
+    df = pd.read_csv(
+        fname + ext, delimiter=",", skiprows=skip_lines, names=column_names
+    )
     # Return df or array
     if return_as_df:
         return df, header
     return np.array([df[col].values for col in df.columns]), header
+
 
 def load_header(fname, ext=config._filetype):
     """Open a trace file and get the header
@@ -259,14 +287,16 @@ def load_header(fname, ext=config._filetype):
         Lines at the beginning of the file starting with ``'#'``, stripped
         off ``'# '``
     """
-    if fname[-4:] in ['.csv']:
+    if fname[-4:] in [".csv"]:
         ext = fname[-4:]
         fname = fname[:-4]
     header = []
-    with open(fname+ext) as f:
-        for line in f: # A few tens of us slower than a 'while True: readline()' approach
+    with open(fname + ext) as f:
+        for (
+            line
+        ) in f:  # A few tens of us slower than a 'while True: readline()' approach
             # Check if part of the header
-            if line[0] == '#':
+            if line[0] == "#":
                 # Add the line without the initial '# ' to the header
                 header.append(line.strip()[2:])
             else:

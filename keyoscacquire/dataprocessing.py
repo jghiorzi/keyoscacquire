@@ -54,12 +54,16 @@ def process_data(raw, metadata, wav_format, verbose_acquistion=True):
     --------
     :func:`keyoscacquire.oscilloscope.Oscilloscope.capture_and_read`
     """
-    if wav_format[:3] in ['WOR', 'BYT']:
+    if wav_format[:3] in ["WOR", "BYT"]:
         processing_fn = _process_data_binary
-    elif wav_format[:3] == 'ASC':
+    elif wav_format[:3] == "ASC":
         processing_fn = _process_data_ascii
     else:
-        raise ValueError("Could not process data, waveform format \'{}\' is unknown.".format(wav_format))
+        raise ValueError(
+            "Could not process data, waveform format '{}' is unknown.".format(
+                wav_format
+            )
+        )
     return processing_fn(raw, metadata, verbose_acquistion)
 
 
@@ -87,21 +91,26 @@ def _process_data_binary(raw, preambles, verbose_acquistion=True):
         Voltage values, each row represents one channel
     """
     # Pick one preamble and use for calculating the time values (same for all channels)
-    preamble = preambles[0].split(',')  # values separated by commas
+    preamble = preambles[0].split(",")  # values separated by commas
     num_samples = int(float(preamble[2]))
     xIncr, xOrig, xRef = float(preamble[4]), float(preamble[5]), float(preamble[6])
-    time = np.array([(np.arange(num_samples)-xRef)*xIncr + xOrig]) # compute x-values
-    time = time.T # make x values vertical
+    time = np.array(
+        [(np.arange(num_samples) - xRef) * xIncr + xOrig]
+    )  # compute x-values
+    time = time.T  # make x values vertical
     _log.debug(f"Points captured per channel:  {num_samples:,d}")
     if verbose_acquistion:
         print(f"Points captured per channel:  {num_samples:,d}")
     y = np.empty((len(raw), num_samples))
-    for i, data in enumerate(raw): # process each channel individually
-        preamble = preambles[i].split(',')
+    for i, data in enumerate(raw):  # process each channel individually
+        preamble = preambles[i].split(",")
         yIncr, yOrig, yRef = float(preamble[7]), float(preamble[8]), float(preamble[9])
-        y[i,:] = (data-yRef)*yIncr + yOrig
-    y = y.T # convert y to np array and transpose for vertical channel columns in csv file
+        y[i, :] = (data - yRef) * yIncr + yOrig
+    y = (
+        y.T
+    )  # convert y to np array and transpose for vertical channel columns in csv file
     return time, y
+
 
 def _process_data_ascii(raw, metadata, verbose_acquistion=True):
     """Process raw comma separated ascii data to time values and y voltage
@@ -127,23 +136,27 @@ def _process_data_ascii(raw, metadata, verbose_acquistion=True):
         Voltage values, each row represents one channel
     """
     preamble, model_series = metadata
-    preamble = preamble.split(',')  # Values separated by commas
+    preamble = preamble.split(",")  # Values separated by commas
     num_samples = int(float(preamble[2]))
     xIncr, xOrig, xRef = float(preamble[4]), float(preamble[5]), float(preamble[6])
     # Compute time axis and wrap in extra [] to make it 2D
-    time = np.array([(np.arange(num_samples)-xRef)*xIncr + xOrig])
-    time = time.T # Make list vertical
+    time = np.array([(np.arange(num_samples) - xRef) * xIncr + xOrig])
+    time = time.T  # Make list vertical
     _log.debug(f"Points captured per channel:  {num_samples:,d}")
     if verbose_acquistion:
         print(f"Points captured per channel:  {num_samples:,d}")
     y = []
     for data in raw:
-        if model_series in ['2000']:
-            data = data.split(data[:10])[1] # remove first 10 characters (IEEE block header)
-        elif model_series in ['9000']:
-            data = data.strip().strip(",") # remove newline character at the end of the string
-        data = data.split(',') # samples separated by commas
+        if model_series in ["2000"]:
+            data = data.split(data[:10])[
+                1
+            ]  # remove first 10 characters (IEEE block header)
+        elif model_series in ["9000"]:
+            data = data.strip().strip(
+                ","
+            )  # remove newline character at the end of the string
+        data = data.split(",")  # samples separated by commas
         data = np.array([float(sample) for sample in data])
-        y.append(data) # add ascii data for this channel to y array
+        y.append(data)  # add ascii data for this channel to y array
     y = np.transpose(np.array(y))
     return time, y
