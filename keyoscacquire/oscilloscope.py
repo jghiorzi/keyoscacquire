@@ -15,6 +15,7 @@ import logging
 import datetime as dt
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import List, Tuple, Union
 
 import keyoscacquire.config as config
 import keyoscacquire.visa_utils as visa_utils
@@ -118,10 +119,10 @@ class Oscilloscope:
 
     def __init__(
         self,
-        address=config._visa_address,
-        timeout=config._timeout,
-        get_errors_on_init=False,
-        verbose=True,
+        address: str = config._visa_address,
+        timeout: int = config._timeout,
+        get_errors_on_init: bool = False,
+        verbose: bool = True,
     ):
         """See class docstring"""
         self._address = address
@@ -130,7 +131,7 @@ class Oscilloscope:
         try:
             rm = pyvisa.ResourceManager()
             self._inst = rm.open_resource(address)
-        except pyvisa.Error as err:
+        except pyvisa.Error:
             print(f"\n\nCould not connect to '{address}', see traceback below:\n")
             raise
         self.timeout = timeout
@@ -141,11 +142,10 @@ class Oscilloscope:
             self.get_full_error_queue(verbose=True)
         # Clear the status data structures, the device-defined error queue, and the Request-for-OPC flag
         self.write("*CLS")
-        # Make sure WORD and BYTE data is transeferred as signed ints and lease significant bit first
+        # Make sure WORD and BYTE data is transferred as signed ints and lease significant bit first
         self.write(":WAVeform:UNSigned OFF")
-        self.write(
-            ":WAVeform:BYTeorder LSBFirst"
-        )  # MSBF is default, must be overridden for WORD to work
+        # MSBF is default, changing to LSBF
+        self.write(":WAVeform:BYTeorder LSBFirst")
         # Get information about the connected device
         self._information_about_device()
         # Set standard settings
@@ -179,12 +179,12 @@ class Oscilloscope:
             print("(!) Failed to intepret the VISA IDN string")
         if not self._model_series in _SUPPORTED_SERIES:
             print(
-                f"(!) WARNING: This model ({self._model}) is not yet fully supported by keyoscacquire,"
+                f"(!) WARNING: This model ({self._model}) is not yet fully "
+                f"supported by keyoscacquire,\n"
+                f"             but might work to some extent. keyoscacquire "
+                f"supports Keysight's\n"
+                f"             InfiniiVision X-series oscilloscopes."
             )
-            print(
-                "             but might work to some extent. keyoscacquire supports Keysight's"
-            )
-            print("             InfiniiVision X-series oscilloscopes.")
 
     def __enter__(self):
         return self
@@ -196,7 +196,7 @@ class Oscilloscope:
         else:
             self.close()
 
-    def write(self, command):
+    def write(self, command: str):
         """Write a VISA command to the oscilloscope.
 
         Parameters
@@ -205,7 +205,7 @@ class Oscilloscope:
             VISA command to be written"""
         self._inst.write(command)
 
-    def query(self, command, action=""):
+    def query(self, command: str, action: str = "") -> str:
         """Query a VISA command to the oscilloscope. Will ask the oscilloscope
         for the latest error if the query times out.
 
@@ -238,7 +238,7 @@ class Oscilloscope:
                 print("")
             raise
 
-    def close(self, set_running=True):
+    def close(self, set_running: bool = True):
         """Closes the connection to the oscilloscope.
 
         Parameters
@@ -253,7 +253,7 @@ class Oscilloscope:
         self._inst.close()
         _log.debug(f"Closed connection to '{self._id}'")
 
-    def get_error(self):
+    def get_error(self) -> str:
         """Get the first error in the error queue, a FIFO queue of max length 30.
         The queue is reset when ``*CLS`` is written to the scope, which happens
         in __init__().
@@ -266,11 +266,11 @@ class Oscilloscope:
         # Do not use self.query here as that can lead to infinite nesting!
         return self._inst.query(":SYSTem:ERRor?").strip()
 
-    def get_full_error_queue(self, verbose=True):
+    def get_full_error_queue(self, verbose: bool = True) -> List[str]:
         """All the latest errors from the oscilloscope, upto 30 errors
         (and store to the attribute ``errors``)"""
         self.errors = []
-        for i in range(30):
+        for _ in range(30):
             err = self.get_error()
             if err[:2] == "+0":  # No error
                 # Stop querying
@@ -282,7 +282,7 @@ class Oscilloscope:
             self._print_errors(self.errors)
         return self.errors
 
-    def _print_errors(self, errors):
+    def _print_errors(self, errors: List[str]):
         """Print the errors obtained by :func:`Oscilloscope.get_full_error_queue`"""
         if not errors:
             print("Error queue empty")
@@ -299,7 +299,7 @@ class Oscilloscope:
         """Stop the oscilloscope."""
         self.write(":STOP")
 
-    def is_running(self):
+    def is_running(self) -> bool:
         """Determine if the oscilloscope is running.
 
         Returns
@@ -312,7 +312,7 @@ class Oscilloscope:
         return (reg & 8) == 8
 
     @property
-    def timeout(self):
+    def timeout(self) -> int:
         """The timeout on the VISA communication with the instrument. The
         timeout must be longer than the acquisition time.
 
@@ -328,7 +328,7 @@ class Oscilloscope:
         self._inst.timeout = timeout
 
     @property
-    def active_channels(self):
+    def active_channels(self) -> List[int]:
         """Find the currently active channels on the instrument
 
         .. note:: Changing the active channels will not affect with channels are
@@ -343,15 +343,16 @@ class Oscilloscope:
         return [i for i in range(1, 5) if bool(int(self.query(f":CHAN{i}:DISP?")))]
 
     @active_channels.setter
-    def active_channels(self, channels: list):
+    def active_channels(self, channels: List[int]):
         """See getter"""
         if not isinstance(channels, list):
             channels = [channels]
+
         for i in range(1, 5):
             self.write(f":CHAN{i}:DISP {int(i in channels)}")
 
     @property
-    def acq_type(self):
+    def acq_type(self) -> str:
         """Acquisition mode of the oscilloscope
 
         Choose between
@@ -378,7 +379,8 @@ class Oscilloscope:
         Raises
         ------
         ValueError
-            If ``<m>`` in cannot be converted to an int (or is out of range)
+            If the acqusition type string cannot be recognised, or
+            if ``<m>`` in cannot be converted to an int (or is out of range)
         """
         return self.query(":ACQuire:TYPE?")
 
@@ -386,6 +388,8 @@ class Oscilloscope:
     def acq_type(self, a_type: str):
         """See getter"""
         acq_type = a_type[:4].upper()
+        if acq_type not in ["NORM", "AVER", "HRES"]:
+            raise ValueError(f"'NORMal', 'AVERage', 'AVER<m>', 'HRES'")
         self.write(f":ACQuire:TYPE {acq_type}")
         # Handle AVER<m> expressions
         if acq_type == "AVER":
@@ -400,18 +404,20 @@ class Oscilloscope:
         ValueError
             If * cannot be converted to int
         """
-        if len(a_type) > 4 and not a_type[4:].lower() == "age":
-            try:
-                self.num_averages = int(a_type[4:])
-            except ValueError:
-                ValueError(
-                    f"\nValueError: Failed to convert '{a_type[4:]}' to an integer, "
-                    "check that acquisition type is on the form AVER or AVER<m> "
-                    f"where <m> is an integer (currently acq. type is '{a_type}').\n"
-                )
+        if len(a_type) < 5 or a_type[4:].lower() in "age":
+            # Do nothing as the
+            return
+        try:
+            self.num_averages = int(a_type[4:])
+        except ValueError:
+            ValueError(
+                f"\nValueError: Failed to convert '{a_type[4:]}' to an integer, "
+                "check that acquisition type is on the form AVER or AVER<m> "
+                f"where <m> is an integer (currently acq. type is '{a_type}').\n"
+            )
 
     @property
-    def num_averages(self):
+    def num_averages(self) -> int:
         """The number of averages taken if the scope is in the ``'AVERage'``
         :attr:`acq_type`
 
@@ -422,14 +428,14 @@ class Oscilloscope:
         Raises
         ------
         ValueError
-            If the number is is out of range
+            If the number is out of range, not or not an integer
         """
         return self.query(":ACQuire:COUNt?")
 
     @num_averages.setter
     def num_averages(self, num: int):
         """See getter"""
-        if not (2 <= num <= 65536):
+        if not ((2 <= num <= 65536) and isinstance(num, int)):
             raise ValueError(f"\nThe number of averages {num} is out of range.")
         self.write(f":ACQuire:COUNt {num}")
 
@@ -442,7 +448,7 @@ class Oscilloscope:
         print(f"From channels:    {self._capture_channels}")
 
     @property
-    def p_mode(self):
+    def p_mode(self) -> str:
         """The points mode of the acquistion
 
         ``'NORMal'`` is limited to 62,500 points, whereas ``'RAW'`` gives up to
@@ -451,12 +457,21 @@ class Oscilloscope:
         :getter:  Returns the current mode
         :setter:  Set the mode, will check if compatible with the :attr:`acq_type`
         :type:    ``{'NORMal', 'RAW', 'MAXimum'}``
+
+        Raises
+        ------
+        ValueError
+            If the p_mode format can't be recognised
         """
         return self.query(":WAVeform:POINts:MODE?")
 
     @p_mode.setter
     def p_mode(self, p_mode: str):
         """See getter"""
+        if p_mode[:3].upper() not in ["NOR", "RAW", "MAX"]:
+            raise ValueError(
+                f"Points mode must be 'NORMal', 'RAW', or 'MAXimum', not '{p_mode}'"
+            )
         if (not p_mode[:4] == "NORM") and self.acq_type == "AVER":
             p_mode = "NORM"
             _log.info(
@@ -467,7 +482,7 @@ class Oscilloscope:
         _log.debug(f"Points mode set to:  {p_mode}")
 
     @property
-    def num_points(self):
+    def num_points(self) -> int:
         """The number of points to be acquired for each channel. Use 0 to
         get the maximum number given the :attr:`p_mode`, or override with a
         lower number than maximum for the given :attr:`p_mode`
@@ -507,29 +522,29 @@ class Oscilloscope:
         if num_points == 0:
             self.write(f":WAVeform:POINts MAXimum")
             _log.debug("Number of points set to: MAX")
+            return
         # If number of points has been specified, tell the instrument to
         # use this number of points
-        elif num_points > 0:
-            if self._model_series in ["9000"]:
-                self.write(f":ACQuire:POINts {num_points}")
-            else:
-                if num_points > 7680:
-                    self.p_mode = "RAW"
-                # Must stop the scope to set the number of points to avoid
-                # getting an error in the scopes' log (however, it seems to
-                # be working regardless, only the get_error() will return -222)
-                self.stop()
-                self.write(f":WAVeform:POINts {num_points}")
-                self.run()
-            _log.debug(f"Number of points set to:  {num_points}")
-        else:
-            ValueError(
+        if not (num_points > 0 and isinstance(num_points, int)):
+            raise ValueError(
                 f"Cannot set points mode ('{num_points}' is not a "
                 "non-negative integer)"
             )
+        if self._model_series in ["9000"]:
+            self.write(f":ACQuire:POINts {num_points}")
+        else:
+            if num_points > 7680:
+                self.p_mode = "RAW"
+            # Must stop the scope to set the number of points to avoid
+            # getting an error in the scopes' log (however, it seems to
+            # be working regardless, only the get_error() will return -222)
+            self.stop()
+            self.write(f":WAVeform:POINts {num_points}")
+            self.run()
+        _log.debug(f"Number of points set to:  {num_points}")
 
     @property
-    def wav_format(self):
+    def wav_format(self) -> str:
         """Data transmission mode for waveform data points, i.e. how
         the data is formatted when sent from the oscilloscope.
 
@@ -550,17 +565,22 @@ class Oscilloscope:
     @wav_format.setter
     def wav_format(self, wav_format: str):
         """See getter"""
+        if wav_format[:3].upper() not in ["WOR", "BYT", "ASC"]:
+            raise ValueError(
+                f"Waveform format must be either 'WORD', 'BYTE', or 'ASCII', "
+                f"not '{wav_format}'"
+            )
         self.write(f":WAVeform:FORMat {wav_format}")
         _log.debug(f"Waveform format set to:  {wav_format}")
 
     def set_acquiring_options(
         self,
-        wav_format=None,
-        acq_type=None,
-        num_averages=None,
-        p_mode=None,
-        num_points=None,
-        verbose_acquistion=None,
+        wav_format: str = None,
+        acq_type: str = None,
+        num_averages: int = None,
+        p_mode: str = None,
+        num_points: int = None,
+        verbose_acquistion: bool = None,
     ):
         """Change acquisition options
 
@@ -601,7 +621,7 @@ class Oscilloscope:
         self.set_waveform_export_options(wav_format, num_points, p_mode)
 
     def set_waveform_export_options(
-        self, wav_format=None, num_points=None, p_mode=None
+        self, wav_format: str = None, num_points: int = None, p_mode: str = None
     ):
         """
         Set options for the waveform export from the oscilloscope to the computer
@@ -627,7 +647,9 @@ class Oscilloscope:
 
     ## Capture and read functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 
-    def set_channels_for_capture(self, channels="active"):
+    def set_channels_for_capture(
+        self, channels: Union[List[int], str] = "active"
+    ) -> List[int]:
         """Decide the channels to be acquired, or determine by checking active
         channels on the oscilloscope.
 
@@ -652,7 +674,7 @@ class Oscilloscope:
         self._sources = [f"CHAN{ch}" for ch in self._capture_channels]
         return self._capture_channels
 
-    def capture_and_read(self, set_running=True):
+    def capture_and_read(self, set_running: bool = True):
         """Acquire raw data from selected channels according to acquring options
         currently set with :func:`set_acquiring_options`.
         The parameters are provided by :func:`set_channels_for_capture`.
@@ -710,7 +732,7 @@ class Oscilloscope:
         if set_running:
             self.run()
 
-    def _read_binary(self, datatype="standard"):
+    def _read_binary(self, datatype: str = "standard"):
         """Read data and metadata from sources of the oscilloscope
         when waveform format is ``'WORD'`` or ``'BYTE'``.
 
@@ -806,7 +828,9 @@ class Oscilloscope:
 
     ## Building functions to get a trace and various option setting and processing ##
 
-    def get_trace(self, channels=None, verbose_acquistion=None):
+    def get_trace(
+        self, channels: Union[List[int], str] = None, verbose_acquistion: bool = None
+    ) -> Tuple[np.ndarray, np.ndarray, List[int]]:
         """Obtain one trace with current settings. Will return the values
         of the traces, but alos populate a few attributes, including
         ``_time``, ``_values`` and ``_capture_channels``.
@@ -848,13 +872,13 @@ class Oscilloscope:
 
     def set_options_get_trace(
         self,
-        channels=None,
-        wav_format=None,
-        acq_type=None,
-        num_averages=None,
-        p_mode=None,
-        num_points=None,
-    ):
+        channels: Union[List[int], str] = None,
+        wav_format: str = None,
+        acq_type: str = None,
+        num_averages: int = None,
+        p_mode: str = None,
+        num_points: int = None,
+    ) -> Tuple[np.ndarray, np.ndarray, List[int]]:
         """Set the options provided by the parameters and obtain one trace.
 
         Parameters
@@ -900,15 +924,15 @@ class Oscilloscope:
 
     def set_options_get_trace_save(
         self,
-        fname=None,
-        ext=None,
-        channels=None,
-        wav_format=None,
-        acq_type=None,
-        num_averages=None,
-        p_mode=None,
-        num_points=None,
-        additional_header_info=None,
+        fname: str = None,
+        ext: str = None,
+        channels: Union[List[int], str] = None,
+        wav_format: str = None,
+        acq_type: str = None,
+        num_averages: int = None,
+        p_mode: str = None,
+        num_points: int = None,
+        additional_header_info: str = None,
     ):
         """Get trace and save the trace to a file and plot to png.
 
@@ -958,7 +982,12 @@ class Oscilloscope:
         )
         self.save_trace(fname, ext, additional_header_info=additional_header_info)
 
-    def generate_file_header(self, channels=None, additional_line=None, timestamp=True):
+    def generate_file_header(
+        self,
+        channels: Union[List[int], str] = None,
+        additional_line: str = None,
+        timestamp: bool = True,
+    ) -> str:
         """Generate string to be used as file header for saved files
 
         The file header has this structure::
@@ -1026,12 +1055,12 @@ class Oscilloscope:
 
     def save_trace(
         self,
-        fname=None,
-        ext=None,
-        additional_header_info=None,
-        savepng=None,
-        showplot=None,
-        nowarn=False,
+        fname: str = None,
+        ext: str = None,
+        additional_header_info: str = None,
+        savepng: bool = None,
+        showplot: bool = None,
+        nowarn: bool = False,
     ):
         """Save the most recent trace to ``fname+ext``. Will check if the filename
         exists, and let the user append to the fname if that is the case.
