@@ -15,10 +15,17 @@ post-process data separately from capturing it.
 import logging
 import numpy as np
 
+from typing import Tuple, Union, List
+
 _log = logging.getLogger(__name__)
 
 
-def process_data(raw, metadata, wav_format, verbose_acquistion=True):
+def process_data(
+    raw: Union[List[np.ndarray], str],
+    metadata: Union[List[str], Tuple[str, str]],
+    wav_format: str,
+    verbose_acquistion: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
     """Wrapper function for choosing the correct _process_data function
     according to :attr:`wav_format` for the data obtained from
     :func:`~keyoscacquire.oscilloscope.Oscilloscope.capture_and_read`
@@ -54,20 +61,20 @@ def process_data(raw, metadata, wav_format, verbose_acquistion=True):
     --------
     :func:`keyoscacquire.oscilloscope.Oscilloscope.capture_and_read`
     """
-    if wav_format[:3] in ["WOR", "BYT"]:
+    if wav_format[:3].upper() in ["WOR", "BYT"]:
         processing_fn = _process_data_binary
-    elif wav_format[:3] == "ASC":
+    elif wav_format[:3].upper() == "ASC":
         processing_fn = _process_data_ascii
     else:
         raise ValueError(
-            "Could not process data, waveform format '{}' is unknown.".format(
-                wav_format
-            )
+            f"Could not process data, waveform format '{wav_format}' is unknown."
         )
     return processing_fn(raw, metadata, verbose_acquistion)
 
 
-def _process_data_binary(raw, preambles, verbose_acquistion=True):
+def _process_data_binary(
+    raw: List[np.ndarray], preambles: List[str], verbose_acquistion: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """Process raw 8/16-bit data to time values and y voltage values as received
     from :func:`Oscilloscope.capture_and_read_binary`.
 
@@ -106,13 +113,14 @@ def _process_data_binary(raw, preambles, verbose_acquistion=True):
         preamble = preambles[i].split(",")
         yIncr, yOrig, yRef = float(preamble[7]), float(preamble[8]), float(preamble[9])
         y[i, :] = (data - yRef) * yIncr + yOrig
-    y = (
-        y.T
-    )  # convert y to np array and transpose for vertical channel columns in csv file
+    # Convert y to np array and transpose for vertical channel columns in csv file
+    y = y.T
     return time, y
 
 
-def _process_data_ascii(raw, metadata, verbose_acquistion=True):
+def _process_data_ascii(
+    raw: List[str], metadata: Tuple[str, str], verbose_acquistion: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """Process raw comma separated ascii data to time values and y voltage
     values as received from :func:`Oscilloscope.capture_and_read_ascii`
 
@@ -148,13 +156,11 @@ def _process_data_ascii(raw, metadata, verbose_acquistion=True):
     y = []
     for data in raw:
         if model_series in ["2000"]:
-            data = data.split(data[:10])[
-                1
-            ]  # remove first 10 characters (IEEE block header)
+            # Remove first 10 characters (IEEE block header)
+            data = data.split(data[:10])[1]
         elif model_series in ["9000"]:
-            data = data.strip().strip(
-                ","
-            )  # remove newline character at the end of the string
+            # Remove newline character at the end of the string
+            data = data.strip().strip(",")
         data = data.split(",")  # samples separated by commas
         data = np.array([float(sample) for sample in data])
         y.append(data)  # add ascii data for this channel to y array
